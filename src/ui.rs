@@ -11,6 +11,8 @@ use ratatui::{
 };
 use std::io;
 
+use crate::animation::AnimationEngine;
+use crate::git::CommitMetadata;
 use crate::panes::{EditorPane, FileTreePane, StatusBarPane, TerminalPane};
 
 pub struct UI {
@@ -19,17 +21,26 @@ pub struct UI {
     editor: EditorPane,
     terminal: TerminalPane,
     status_bar: StatusBarPane,
+    engine: AnimationEngine,
+    metadata: Option<CommitMetadata>,
 }
 
 impl UI {
-    pub fn new() -> Self {
+    pub fn new(speed_ms: u64) -> Self {
         Self {
             should_quit: false,
             file_tree: FileTreePane,
             editor: EditorPane,
             terminal: TerminalPane,
             status_bar: StatusBarPane,
+            engine: AnimationEngine::new(speed_ms),
+            metadata: None,
         }
+    }
+
+    pub fn load_commit(&mut self, metadata: CommitMetadata) {
+        self.engine.load_commit(&metadata);
+        self.metadata = Some(metadata);
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -54,9 +65,15 @@ impl UI {
 
     fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         loop {
-            terminal.draw(|f| self.render(f))?;
+            // Tick the animation engine
+            let needs_redraw = self.engine.tick();
 
-            if event::poll(std::time::Duration::from_millis(100))? {
+            if needs_redraw {
+                terminal.draw(|f| self.render(f))?;
+            }
+
+            if event::poll(std::time::Duration::from_millis(16))? {
+                // ~60fps polling
                 if let Event::Key(key) = event::read()? {
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => {
@@ -102,9 +119,11 @@ impl UI {
             ])
             .split(content_layout[1]);
 
-        self.file_tree.render(f, content_layout[0]);
-        self.editor.render(f, right_layout[0]);
+        self.file_tree
+            .render(f, content_layout[0], self.metadata.as_ref());
+        self.editor.render(f, right_layout[0], &self.engine);
         self.terminal.render(f, right_layout[1]);
-        self.status_bar.render(f, main_layout[1]);
+        self.status_bar
+            .render(f, main_layout[1], self.metadata.as_ref());
     }
 }

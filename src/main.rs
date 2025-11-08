@@ -1,3 +1,4 @@
+mod animation;
 mod git;
 mod panes;
 mod ui;
@@ -69,19 +70,20 @@ impl Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let _repo_path = args.validate()?;
+    let repo_path = args.validate()?;
 
-    // Launch UI
-    let mut ui = UI::new();
+    // Load git repository and commit
+    let repo = GitRepository::open(&repo_path)?;
+    let metadata = if let Some(commit_hash) = &args.commit {
+        repo.get_commit(commit_hash)?
+    } else {
+        repo.random_commit()?
+    };
+
+    // Launch UI with animation
+    let mut ui = UI::new(args.speed);
+    ui.load_commit(metadata);
     ui.run()?;
-
-    // TODO: Integrate with git module to load and display commits
-    // let repo = GitRepository::open(&repo_path)?;
-    // if let Some(commit_hash) = &args.commit {
-    //     let metadata = repo.get_commit(commit_hash)?;
-    // } else {
-    //     let metadata = repo.random_commit()?;
-    // }
 
     Ok(())
 }
