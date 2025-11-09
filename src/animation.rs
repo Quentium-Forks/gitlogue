@@ -284,6 +284,21 @@ impl AnimationEngine {
 
         // Process all file changes
         for (index, change) in metadata.changes.iter().enumerate() {
+            // Skip excluded files (lock files and generated files)
+            if change.is_excluded {
+                // Show skip message for excluded files
+                self.steps.push(AnimationStep::Pause {
+                    duration_ms: (self.speed_ms as f64 * OPEN_FILE_PAUSE) as u64,
+                });
+                self.steps.push(AnimationStep::TerminalOutput {
+                    text: format!("📦 {} (skipped - generated file)", change.path),
+                });
+                self.steps.push(AnimationStep::Pause {
+                    duration_ms: (self.speed_ms as f64 * OPEN_CMD_PAUSE) as u64,
+                });
+                continue;
+            }
+
             // Open file in editor
             if index == 0 {
                 self.steps.push(AnimationStep::Pause {
