@@ -3,8 +3,11 @@ use rand::Rng;
 use std::time::{Duration, Instant};
 
 // Duration multipliers relative to typing speed
-const CURSOR_MOVE_PAUSE: f64 = 0.5;       // Cursor movement between lines
+const CURSOR_MOVE_PAUSE: f64 = 0.5;       // Cursor movement between lines (base speed)
 const CURSOR_MOVE_END_PAUSE: f64 = 10.0;  // After cursor movement completes
+const CURSOR_MOVE_SHORT_MULTIPLIER: f64 = 1.0;   // Speed for short distances (1-5 lines)
+const CURSOR_MOVE_MEDIUM_MULTIPLIER: f64 = 0.3;  // Speed for medium distances (6-20 lines)
+const CURSOR_MOVE_LONG_MULTIPLIER: f64 = 0.1;    // Speed for long distances (21+ lines)
 const DELETE_LINE_PAUSE: f64 = 10.0;      // After deleting a line
 const INSERT_LINE_PAUSE: f64 = 6.7;       // After inserting a line
 const HUNK_PAUSE: f64 = 50.0;             // Between hunks
@@ -72,19 +75,6 @@ impl EditorBuffer {
         line_str.insert(byte_idx, ch);
     }
 
-    pub fn delete_char(&mut self, line: usize, col: usize) {
-        if line >= self.lines.len() {
-            return;
-        }
-
-        let line_str = &mut self.lines[line];
-
-        // Convert char index to byte index
-        if let Some((byte_idx, _)) = line_str.char_indices().nth(col) {
-            line_str.remove(byte_idx);
-        }
-    }
-
     pub fn insert_line(&mut self, line: usize, content: String) {
         if line > self.lines.len() {
             self.lines.resize(line, String::new());
@@ -100,17 +90,12 @@ impl EditorBuffer {
             self.lines.push(String::new());
         }
     }
-
-    pub fn get_content(&self) -> String {
-        self.lines.join("\n")
-    }
 }
 
 /// Individual animation step
 #[derive(Debug, Clone)]
 pub enum AnimationStep {
     InsertChar { line: usize, col: usize, ch: char },
-    DeleteChar { line: usize, col: usize },
     InsertLine { line: usize, content: String },
     DeleteLine { line: usize },
     MoveCursor { line: usize, col: usize },
@@ -126,7 +111,6 @@ pub enum AnimationStep {
 pub enum AnimationState {
     Idle,
     Playing,
-    Paused,
     Finished,
 }
 
@@ -195,12 +179,24 @@ impl AnimationEngine {
         self.current_file_index = 0;
         self.terminal_lines.clear();
 
-        // Git checkout to parent commit (simulation)
+        // Time travel to commit date
         let parent_hash = format!("{}^", &metadata.hash[..7]);
-        self.add_terminal_command(&format!("git checkout {}", parent_hash));
+        let datetime_str = metadata.date.format("%Y-%m-%d %H:%M:%S").to_string();
+        self.add_terminal_command(&format!("time-travel {}", datetime_str));
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * CHECKOUT_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: format!("HEAD is now at {} Previous commit", parent_hash),
+            text: "⚡ Initializing temporal displacement field...".to_string(),
+        });
+        self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * CHECKOUT_OUTPUT_PAUSE * 0.5) as u64 });
+        self.steps.push(AnimationStep::TerminalOutput {
+            text: "✨ Warping through spacetime...".to_string(),
+        });
+        self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * CHECKOUT_OUTPUT_PAUSE * 0.5) as u64 });
+        self.steps.push(AnimationStep::TerminalOutput {
+            text: format!("🕰️  Arrived at {}", datetime_str),
+        });
+        self.steps.push(AnimationStep::TerminalOutput {
+            text: format!("📍 Location: commit {} by {}", &metadata.hash[..7], metadata.author),
         });
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * CHECKOUT_OUTPUT_PAUSE) as u64 });
 
@@ -239,11 +235,11 @@ impl AnimationEngine {
         self.add_terminal_command(&format!("git commit -m \"{}\"", commit_message));
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * GIT_COMMIT_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: format!("[main {}] {}", &metadata.hash[..7], commit_message),
+            text: format!("💾 [main {}] {}", &metadata.hash[..7], commit_message),
         });
         self.steps.push(AnimationStep::TerminalOutput {
             text: format!(
-                " {} file{} changed",
+                "📝 {} file{} changed - immortalized forever!",
                 metadata.changes.len(),
                 if metadata.changes.len() == 1 { "" } else { "s" }
             ),
@@ -254,22 +250,23 @@ impl AnimationEngine {
         self.add_terminal_command("git push origin main");
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * GIT_PUSH_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: "Enumerating objects: 5, done.".to_string(),
+            text: "🚀 Launching code into the cloud...".to_string(),
         });
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * PUSH_OUTPUT_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: "Counting objects: 100% (5/5), done.".to_string(),
+            text: "📦 Compressing digital dreams: 100% (5/5)".to_string(),
         });
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * PUSH_OUTPUT_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: "Writing objects: 100% (3/3), done.".to_string(),
+            text: "✍️  Signing with invisible ink: done.".to_string(),
         });
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * GIT_PUSH_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: format!("To https://github.com/user/repo.git"),
+            text: "📡 Beaming to origin/main via satellite...".to_string(),
         });
+        self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * PUSH_OUTPUT_PAUSE) as u64 });
         self.steps.push(AnimationStep::TerminalOutput {
-            text: format!("   {}..{} main -> main", &parent_hash[..7], &metadata.hash[..7]),
+            text: format!("   {}..{} ✨ SUCCESS", &parent_hash[..7], &metadata.hash[..7]),
         });
         self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * PUSH_FINAL_PAUSE) as u64 });
 
@@ -289,8 +286,15 @@ impl AnimationEngine {
             // We need to convert to 0-indexed and adjust by how many lines we've added/removed
             let target_line = ((hunk.old_start as i64) - 1 + line_offset) as usize;
 
+            // Calculate distance for speed adjustment
+            let distance = if current_cursor_line < target_line {
+                target_line - current_cursor_line
+            } else {
+                current_cursor_line - target_line
+            };
+
             current_cursor_line =
-                self.generate_cursor_movement(current_cursor_line, target_line);
+                self.generate_cursor_movement(current_cursor_line, target_line, distance);
 
             let (final_cursor_line, _final_buffer_line) =
                 self.generate_steps_for_hunk(hunk, current_cursor_line, target_line);
@@ -314,22 +318,34 @@ impl AnimationEngine {
     }
 
     /// Generate cursor movement steps from current line to target line
-    fn generate_cursor_movement(&mut self, from_line: usize, to_line: usize) -> usize {
+    fn generate_cursor_movement(&mut self, from_line: usize, to_line: usize, distance: usize) -> usize {
         if from_line == to_line {
             return to_line;
         }
+
+        // Determine speed multiplier based on total distance
+        let speed_multiplier = if distance <= 5 {
+            CURSOR_MOVE_SHORT_MULTIPLIER
+        } else if distance <= 20 {
+            CURSOR_MOVE_MEDIUM_MULTIPLIER
+        } else {
+            CURSOR_MOVE_LONG_MULTIPLIER
+        };
+
+        // Calculate pause per step
+        let pause_per_step = (self.speed_ms as f64 * CURSOR_MOVE_PAUSE * speed_multiplier).max(1.0) as u64;
 
         if from_line < to_line {
             // Move down
             for line in (from_line + 1)..=to_line {
                 self.steps.push(AnimationStep::MoveCursor { line, col: 0 });
-                self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * CURSOR_MOVE_PAUSE) as u64 });
+                self.steps.push(AnimationStep::Pause { duration_ms: pause_per_step });
             }
         } else {
             // Move up
             for line in (to_line..from_line).rev() {
                 self.steps.push(AnimationStep::MoveCursor { line, col: 0 });
-                self.steps.push(AnimationStep::Pause { duration_ms: (self.speed_ms as f64 * CURSOR_MOVE_PAUSE) as u64 });
+                self.steps.push(AnimationStep::Pause { duration_ms: pause_per_step });
             }
         }
 
@@ -461,12 +477,6 @@ impl AnimationEngine {
                 self.buffer.insert_char(line, col, ch);
                 self.buffer.cursor_line = line;
                 self.buffer.cursor_col = col + 1;
-            }
-            AnimationStep::DeleteChar { line, col } => {
-                self.active_pane = ActivePane::Editor;
-                self.buffer.delete_char(line, col);
-                self.buffer.cursor_line = line;
-                self.buffer.cursor_col = col;
             }
             AnimationStep::InsertLine { line, content } => {
                 self.active_pane = ActivePane::Editor;

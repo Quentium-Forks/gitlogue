@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use git2::{Commit as Git2Commit, Delta, DiffOptions, Oid, Repository};
-use rand::seq::SliceRandom;
+use git2::{Commit as Git2Commit, Delta, DiffOptions, Repository};
+use rand::Rng;
 use std::path::Path;
+
+// Maximum blob size to read (500KB)
+const MAX_BLOB_SIZE: usize = 500 * 1024;
 
 pub struct GitRepository {
     repo: Repository,
@@ -110,28 +113,28 @@ impl GitRepository {
     }
 
     pub fn random_commit(&self) -> Result<CommitMetadata> {
+        // Use single revwalk - collect candidates first, then pick random
         let mut revwalk = self.repo.revwalk()?;
         revwalk.push_head()?;
 
-        let non_merge_commits: Vec<Oid> = revwalk
-            .filter_map(|oid| oid.ok())
-            .filter(|oid| {
-                self.repo
-                    .find_commit(*oid)
-                    .map(|c| c.parent_count() <= 1)
-                    .unwrap_or(false)
-            })
-            .collect();
+        let mut candidates = Vec::new();
+        for oid in revwalk.filter_map(|oid| oid.ok()) {
+            if let Ok(commit) = self.repo.find_commit(oid) {
+                if commit.parent_count() <= 1 {
+                    candidates.push(oid);
+                }
+            }
+        }
 
-        if non_merge_commits.is_empty() {
+        if candidates.is_empty() {
             anyhow::bail!("No non-merge commits found in repository");
         }
 
-        let oid = non_merge_commits
-            .choose(&mut rand::thread_rng())
+        let selected_oid = candidates
+            .get(rand::thread_rng().gen_range(0..candidates.len()))
             .context("Failed to select random commit")?;
 
-        let commit = self.repo.find_commit(*oid)?;
+        let commit = self.repo.find_commit(*selected_oid)?;
         Self::extract_metadata_with_changes(&self.repo, &commit)
     }
 
@@ -159,9 +162,12 @@ impl GitRepository {
     }
 
     fn extract_changes(repo: &Repository, commit: &Git2Commit) -> Result<Vec<FileChange>> {
-        let commit_tree = commit.tree()?;
+        let commit_tree = commit.tree().context("Failed to get commit tree")?;
         let parent_tree = if commit.parent_count() > 0 {
-            Some(commit.parent(0)?.tree()?)
+            match commit.parent(0).and_then(|p| p.tree()) {
+                Ok(tree) => Some(tree),
+                Err(_) => return Ok(Vec::new()), // Skip if parent tree unavailable
+            }
         } else {
             None
         };
@@ -169,11 +175,14 @@ impl GitRepository {
         let mut diff_opts = DiffOptions::new();
         diff_opts.context_lines(3);
 
-        let diff = repo.diff_tree_to_tree(
+        let diff = match repo.diff_tree_to_tree(
             parent_tree.as_ref(),
             Some(&commit_tree),
             Some(&mut diff_opts),
-        )?;
+        ) {
+            Ok(d) => d,
+            Err(_) => return Ok(Vec::new()), // Skip if diff fails
+        };
 
         let mut changes = Vec::new();
 
@@ -204,7 +213,7 @@ impl GitRepository {
                         .ok()
                         .and_then(|entry| repo.find_blob(entry.id()).ok())
                         .and_then(|blob| {
-                            if !blob.is_binary() {
+                            if !blob.is_binary() && blob.size() <= MAX_BLOB_SIZE {
                                 Some(String::from_utf8_lossy(blob.content()).to_string())
                             } else {
                                 None
@@ -223,7 +232,7 @@ impl GitRepository {
                     .ok()
                     .and_then(|entry| repo.find_blob(entry.id()).ok())
                     .and_then(|blob| {
-                        if !blob.is_binary() {
+                        if !blob.is_binary() && blob.size() <= MAX_BLOB_SIZE {
                             Some(String::from_utf8_lossy(blob.content()).to_string())
                         } else {
                             None

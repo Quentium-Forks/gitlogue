@@ -10,14 +10,14 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
+use std::time::{Duration, Instant};
 
 use crate::animation::AnimationEngine;
-use crate::git::CommitMetadata;
+use crate::git::{CommitMetadata, GitRepository};
 use crate::panes::{EditorPane, FileTreePane, StatusBarPane, TerminalPane};
 
-pub struct UI {
+pub struct UI<'a> {
     should_quit: bool,
-    should_reload: bool,
     is_commit_specified: bool,
     file_tree: FileTreePane,
     editor: EditorPane,
@@ -25,13 +25,14 @@ pub struct UI {
     status_bar: StatusBarPane,
     engine: AnimationEngine,
     metadata: Option<CommitMetadata>,
+    repo: Option<&'a GitRepository>,
+    next_commit_at: Option<Instant>,
 }
 
-impl UI {
-    pub fn new(speed_ms: u64, is_commit_specified: bool) -> Self {
+impl<'a> UI<'a> {
+    pub fn new(speed_ms: u64, is_commit_specified: bool, repo: Option<&'a GitRepository>) -> Self {
         Self {
             should_quit: false,
-            should_reload: false,
             is_commit_specified,
             file_tree: FileTreePane,
             editor: EditorPane,
@@ -39,15 +40,18 @@ impl UI {
             status_bar: StatusBarPane,
             engine: AnimationEngine::new(speed_ms),
             metadata: None,
+            repo,
+            next_commit_at: None,
         }
     }
 
     pub fn load_commit(&mut self, metadata: CommitMetadata) {
         self.engine.load_commit(&metadata);
         self.metadata = Some(metadata);
+        self.next_commit_at = None;
     }
 
-    pub fn run(&mut self) -> Result<bool> {
+    pub fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -64,8 +68,7 @@ impl UI {
         )?;
         terminal.show_cursor()?;
 
-        result?;
-        Ok(self.should_reload)
+        result
     }
 
     fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
@@ -105,9 +108,24 @@ impl UI {
                 if self.is_commit_specified {
                     // Commit was specified - just quit
                     self.should_quit = true;
+                } else if let Some(repo) = self.repo {
+                    // Random commit mode - schedule next commit load after delay
+                    if self.next_commit_at.is_none() {
+                        // First time finishing - schedule next commit in 3 seconds
+                        self.next_commit_at = Some(Instant::now() + Duration::from_secs(3));
+                    } else if Instant::now() >= self.next_commit_at.unwrap() {
+                        // Time to load next commit
+                        match repo.random_commit() {
+                            Ok(metadata) => {
+                                self.load_commit(metadata);
+                            }
+                            Err(_) => {
+                                self.should_quit = true;
+                            }
+                        }
+                    }
                 } else {
-                    // Random commit - reload with new commit
-                    self.should_reload = true;
+                    // No repo available - quit
                     self.should_quit = true;
                 }
             }
