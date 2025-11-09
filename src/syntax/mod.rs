@@ -184,9 +184,10 @@ impl Highlighter {
                     }
                     "identifier" => TokenType::Variable,
                     "float" => TokenType::Number,
-                    "none" => TokenType::Constant,
+                    // Markdown and documentation
+                    "text" => TokenType::String,
                     // Skip internal/special markers
-                    "embedded" | "spell" | "__name__" | "_name" | "_op" | "_type" => {
+                    "embedded" | "spell" | "__name__" | "_name" | "_op" | "_type" | "none" => {
                         continue
                     }
                     _ => continue,
