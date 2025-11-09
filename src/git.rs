@@ -25,7 +25,6 @@ const EXCLUDED_FILES: &[&str] = &[
     "composer.lock",
     // Go
     "go.sum",
-    "go.mod",
     // Swift
     "Package.resolved",
     // Dart/Flutter
