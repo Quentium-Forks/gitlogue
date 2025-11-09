@@ -8,6 +8,73 @@ use std::path::Path;
 // Maximum blob size to read (500KB)
 const MAX_BLOB_SIZE: usize = 500 * 1024;
 
+// Files to exclude from diff animation (lock files and generated files)
+const EXCLUDED_FILES: &[&str] = &[
+    // JavaScript/Node.js
+    "yarn.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    // Rust
+    "Cargo.lock",
+    // Ruby
+    "Gemfile.lock",
+    // Python
+    "poetry.lock",
+    "Pipfile.lock",
+    // PHP
+    "composer.lock",
+    // Go
+    "go.sum",
+    "go.mod",
+    // Swift
+    "Package.resolved",
+    // Dart/Flutter
+    "pubspec.lock",
+    // .NET/C#
+    "packages.lock.json",
+    "project.assets.json",
+    // Elixir
+    "mix.lock",
+    // Java/Gradle
+    "gradle.lockfile",
+    "buildscript-gradle.lockfile",
+    // Scala
+    "build.sbt.lock",
+];
+
+// File patterns to exclude from diff animation
+const EXCLUDED_PATTERNS: &[&str] = &[
+    // Minified files
+    ".min.js",
+    ".min.css",
+    // Bundled files
+    ".bundle.js",
+    ".bundle.css",
+    // Source maps
+    ".js.map",
+    ".css.map",
+    ".d.ts.map",
+];
+
+/// Check if a file should be excluded from diff animation
+pub fn should_exclude_file(path: &str) -> bool {
+    let filename = path.rsplit('/').next().unwrap_or(path);
+
+    // Check if it's a lock file
+    if EXCLUDED_FILES.contains(&filename) {
+        return true;
+    }
+
+    // Check if it matches excluded patterns
+    for pattern in EXCLUDED_PATTERNS {
+        if filename.ends_with(pattern) {
+            return true;
+        }
+    }
+
+    false
+}
+
 pub struct GitRepository {
     repo: Repository,
     commit_cache: RefCell<Option<Vec<Oid>>>,
@@ -87,6 +154,7 @@ pub struct FileChange {
     pub status: FileStatus,
     #[allow(dead_code)]
     pub is_binary: bool,
+    pub is_excluded: bool,
     pub old_content: Option<String>,
     #[allow(dead_code)]
     pub new_content: Option<String>,
@@ -328,11 +396,14 @@ impl GitRepository {
                 }
             }
 
+            let is_excluded = should_exclude_file(&path);
+
             changes.push(FileChange {
                 path,
                 old_path,
                 status,
                 is_binary,
+                is_excluded,
                 old_content,
                 new_content,
                 hunks,
@@ -341,5 +412,80 @@ impl GitRepository {
         }
 
         Ok(changes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_exclude_lock_files() {
+        // JavaScript/Node.js
+        assert!(should_exclude_file("package-lock.json"));
+        assert!(should_exclude_file("yarn.lock"));
+        assert!(should_exclude_file("pnpm-lock.yaml"));
+        // Rust
+        assert!(should_exclude_file("Cargo.lock"));
+        // Ruby
+        assert!(should_exclude_file("Gemfile.lock"));
+        // Python
+        assert!(should_exclude_file("poetry.lock"));
+        assert!(should_exclude_file("Pipfile.lock"));
+        // PHP
+        assert!(should_exclude_file("composer.lock"));
+        // Go
+        assert!(should_exclude_file("go.sum"));
+        assert!(should_exclude_file("go.mod"));
+        // Swift
+        assert!(should_exclude_file("Package.resolved"));
+        // Dart/Flutter
+        assert!(should_exclude_file("pubspec.lock"));
+        // .NET/C#
+        assert!(should_exclude_file("packages.lock.json"));
+        assert!(should_exclude_file("project.assets.json"));
+        // Elixir
+        assert!(should_exclude_file("mix.lock"));
+        // Java/Gradle
+        assert!(should_exclude_file("gradle.lockfile"));
+        assert!(should_exclude_file("buildscript-gradle.lockfile"));
+        // Scala
+        assert!(should_exclude_file("build.sbt.lock"));
+    }
+
+    #[test]
+    fn test_should_exclude_lock_files_with_path() {
+        assert!(should_exclude_file("path/to/package-lock.json"));
+        assert!(should_exclude_file("src/Cargo.lock"));
+        assert!(should_exclude_file("frontend/yarn.lock"));
+    }
+
+    #[test]
+    fn test_should_exclude_minified_files() {
+        assert!(should_exclude_file("bundle.min.js"));
+        assert!(should_exclude_file("app.min.css"));
+        assert!(should_exclude_file("vendor.bundle.js"));
+        assert!(should_exclude_file("styles.bundle.css"));
+        // Source maps
+        assert!(should_exclude_file("app.js.map"));
+        assert!(should_exclude_file("styles.css.map"));
+        assert!(should_exclude_file("types.d.ts.map"));
+    }
+
+    #[test]
+    fn test_should_exclude_minified_files_with_path() {
+        assert!(should_exclude_file("dist/bundle.min.js"));
+        assert!(should_exclude_file("public/assets/app.min.css"));
+    }
+
+    #[test]
+    fn test_should_not_exclude_normal_files() {
+        assert!(!should_exclude_file("src/main.rs"));
+        assert!(!should_exclude_file("package.json"));
+        assert!(!should_exclude_file("Cargo.toml"));
+        assert!(!should_exclude_file("app.js"));
+        assert!(!should_exclude_file("styles.css"));
+        assert!(!should_exclude_file("lock.txt"));
+        assert!(!should_exclude_file("minify.rs"));
     }
 }
