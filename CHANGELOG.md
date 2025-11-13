@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-11-13
+
+### 📝 Other Changes
+
+- chore: bump version to v0.1.0 ([10bb7ef](https://github.com/unhappychoice/gitlogue/commit/10bb7ef))
+- docs: add screensaver integration examples for Hyprland, Sway, i3, and X11 ([e31b6a4](https://github.com/unhappychoice/gitlogue/commit/e31b6a4))
+- docs: expand Related Projects section with terminal screensavers ([047d7ca](https://github.com/unhappychoice/gitlogue/commit/047d7ca))
+- Revise README for improved clarity and style ([ed8af4a](https://github.com/unhappychoice/gitlogue/commit/ed8af4a))
+
+
 ## [0.0.5] - 2025-11-12
 
 ### 🐛 Bug Fixes
@@ -13,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 📝 Other Changes
 
-- chore: bump version to v0.0.5 ([2d557cc](https://github.com/unhappychoice/gitlogue/commit/2d557cc))
+- chore: bump version to v0.0.5 ([f42ea87](https://github.com/unhappychoice/gitlogue/commit/f42ea87))
 
 
 ## [0.0.4] - 2025-11-12
